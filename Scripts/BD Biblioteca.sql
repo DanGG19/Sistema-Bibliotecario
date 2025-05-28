@@ -7,9 +7,16 @@
 -- ===========================================================
 
 -- Elimina y crea la base de datos (omite DROP/CREATE si ya existe)
--- DROP DATABASE IF EXISTS Biblioteca;
--- CREATE DATABASE Biblioteca WITH ENCODING = 'UTF8' LC_COLLATE = 'es_SV.UTF-8' LC_CTYPE = 'es_SV.UTF-8' TEMPLATE=template0;
--- \c Biblioteca;
+DROP DATABASE IF EXISTS Biblioteca;
+CREATE DATABASE Biblioteca
+  WITH 
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'es_SV.UTF-8'
+    LC_CTYPE = 'es_SV.UTF-8'
+    TEMPLATE = template0;
+
+
+-- Cambiar de forma automatica la base de datos
 
 -- ============ FUNCIONES DE AUDITORÍA ===============
 CREATE OR REPLACE FUNCTION fn_actualizar_fecha_modificacion()
