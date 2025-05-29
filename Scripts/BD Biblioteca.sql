@@ -1,9 +1,9 @@
 -- ===========================================================
 -- BASE DE DATOS BIBLIOTECA (PostgreSQL) - ESTRUCTURA OPTIMIZADA
 -- ===========================================================
--- Autor: ChatGPT + Usuario
+-- Autor: DanGG19
 -- Fecha: 28 de mayo de 2025
--- Descripción: Estructura completa, refinada, sin datos de ejemplo.
+-- Descripción: Estructura base para el sistema de Biblioteca.
 -- ===========================================================
 
 -- Elimina y crea la base de datos (omite DROP/CREATE si ya existe)
@@ -196,6 +196,123 @@ CREATE TRIGGER trg_prestamos_fecha_modificacion
     BEFORE UPDATE ON Prestamos
     FOR EACH ROW
     EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
+
+-- =========== HISTORIAL DE PRÉSTAMOS ===========
+
+CREATE TABLE historial_prestamos (
+    id_historial SERIAL PRIMARY KEY,
+    id_prestamo INTEGER NOT NULL,
+    id_usuario INTEGER NOT NULL,
+    id_ejemplar INTEGER NOT NULL,
+    accion VARCHAR(20) NOT NULL, -- Ejemplo: 'PRESTAMO', 'DEVOLUCION'
+    fecha_accion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    observaciones TEXT,
+    usuario_registra VARCHAR(100),
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_prestamo) REFERENCES prestamos(id_prestamo),
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario),
+    FOREIGN KEY (id_ejemplar) REFERENCES ejemplares(id_ejemplar)
+);
+
+-- =========== MULTAS POR RETRASO ===========
+
+CREATE TABLE multas (
+    id_multa SERIAL PRIMARY KEY,
+    id_prestamo INTEGER NOT NULL,
+    fecha_generada DATE NOT NULL DEFAULT CURRENT_DATE,
+    fecha_pago DATE,
+    monto NUMERIC(8,2) NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE', -- 'PENDIENTE', 'PAGADA'
+    observaciones TEXT,
+    FOREIGN KEY (id_prestamo) REFERENCES prestamos(id_prestamo)
+);
+
+-- Función para registrar historial cuando se realiza un préstamo
+CRCREATE OR REPLACE FUNCTION registrar_historial_prestamo()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO historial_prestamos (id_prestamo, id_usuario, id_ejemplar, accion, observaciones, usuario_registra)
+    VALUES (
+        NEW.id_prestamo,
+        NEW.id_usuario,
+        NEW.id_ejemplar,
+        'PRESTAMO',
+        NULL,
+        current_user
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para insertar en historial al crear préstamo
+CREATE TRIGGER tg_historial_prestamo
+AFTER INSERT ON Prestamos
+FOR EACH ROW
+EXECUTE FUNCTION registrar_historial_prestamo();
+
+-- Función para registrar historial cuando se realiza una devolución
+CREATE OR REPLACE FUNCTION registrar_historial_devolucion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.fecha_devolucion_real IS NOT NULL AND OLD.fecha_devolucion_real IS DISTINCT FROM NEW.fecha_devolucion_real THEN
+        INSERT INTO historial_prestamos (id_prestamo, id_usuario, id_ejemplar, accion, observaciones, usuario_registra)
+        VALUES (
+            NEW.id_prestamo,
+            NEW.id_usuario,
+            NEW.id_ejemplar,
+            'DEVOLUCION',
+            NULL,
+            current_user
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para insertar en historial al devolver ejemplar
+CREATE TRIGGER tg_historial_devolucion
+AFTER UPDATE OF fecha_devolucion_real ON Prestamos
+FOR EACH ROW
+WHEN (NEW.fecha_devolucion_real IS NOT NULL)
+EXECUTE FUNCTION registrar_historial_devolucion();
+
+-- Función para generar multa por retraso en devolución
+CREATE OR REPLACE FUNCTION generar_multa_por_retraso()
+RETURNS TRIGGER AS $$
+DECLARE
+    dias_retraso INTEGER;
+    monto_multa NUMERIC(8,2);
+BEGIN
+    IF NEW.fecha_devolucion_real IS NOT NULL 
+        AND NEW.fecha_devolucion_estimada IS NOT NULL 
+        AND NEW.fecha_devolucion_real > NEW.fecha_devolucion_estimada THEN
+
+        dias_retraso := DATE(NEW.fecha_devolucion_real) - DATE(NEW.fecha_devolucion_estimada);
+        monto_multa := dias_retraso * 0.50; -- Ajusta el monto si tu política cambia
+
+        INSERT INTO multas (id_prestamo, monto, estado, observaciones)
+        VALUES (
+            NEW.id_prestamo,
+            monto_multa,
+            'PENDIENTE',
+            CONCAT('Retraso de ', dias_retraso, ' días.')
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para generar multa por devolución tardía
+CREATE TRIGGER tg_generar_multa
+AFTER UPDATE OF fecha_devolucion_real ON Prestamos
+FOR EACH ROW
+WHEN (
+    NEW.fecha_devolucion_real IS NOT NULL
+    AND NEW.fecha_devolucion_estimada IS NOT NULL
+    AND NEW.fecha_devolucion_real > NEW.fecha_devolucion_estimada
+)
+EXECUTE FUNCTION generar_multa_por_retraso();
 
 -- ================== Historial de Lectura (inicio) ===================
 CREATE TABLE Historial_Lectura (
