@@ -8,7 +8,7 @@
 
 -- Elimina y crea la base de datos (omite DROP/CREATE si ya existe)
 DROP DATABASE IF EXISTS Biblioteca;
-CREATE DATABASE Biblioteca
+CREATE DATABASE BibliotecaD
   WITH 
     ENCODING = 'UTF8'
     LC_COLLATE = 'es_SV.UTF-8'
@@ -229,7 +229,7 @@ CREATE TABLE multas (
 );
 
 -- Función para registrar historial cuando se realiza un préstamo
-CRCREATE OR REPLACE FUNCTION registrar_historial_prestamo()
+CREATE OR REPLACE FUNCTION registrar_historial_prestamo()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO historial_prestamos (id_prestamo, id_usuario, id_ejemplar, accion, observaciones, usuario_registra)
